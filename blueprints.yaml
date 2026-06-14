@@ -1,0 +1,339 @@
+name: GRVHulk Security
+slug: grvhulk
+type: plugin
+version: 1.0.0
+description: "Advanced IP security for Grav 2: local blacklist, AbuseIPDB, CrowdSec CTI/LAPI, AI crawler blocking via Known Agents, CIDR whitelist, URI filtering."
+icon: shield
+author:
+  name: horiken1216
+  url: https://github.com/horiken1216
+homepage: https://github.com/horiken1216/grav-plugin-grvhulk
+keywords: grav, plugin, security, blacklist, ip, abuseipdb, crowdsec, ai-crawler
+bugs: https://github.com/horiken1216/grav-plugin-grvhulk/issues
+docs: https://github.com/horiken1216/grav-plugin-grvhulk/blob/main/README.md
+license: MIT
+
+dependencies:
+  - { name: grav, version: '>=2.0.0' }
+  - { name: admin, version: '>=2.0.0' }
+
+form:
+  validation: loose
+
+  fields:
+
+    enabled:
+      type: toggle
+      label: PLUGIN_ADMIN.PLUGIN_STATUS
+      highlight: 1
+      default: 0
+      options:
+        1: PLUGIN_ADMIN.ENABLED
+        0: PLUGIN_ADMIN.DISABLED
+      validate:
+        type: bool
+
+    logging:
+      type: toggle
+      label: Logging
+      help: Log blocked requests to Grav's log file (debug level)
+      highlight: 0
+      default: 0
+      options:
+        1: PLUGIN_ADMIN.ENABLED
+        0: PLUGIN_ADMIN.DISABLED
+      validate:
+        type: bool
+
+    response:
+      type: select
+      label: Block Response Code
+      help: HTTP status code returned when a request is blocked
+      default: 403
+      options:
+        400: "400 – Bad Request"
+        403: "403 – Forbidden"
+        418: "418 – I'm a teapot"
+        503: "503 – Service Unavailable"
+
+    # ------------------------------------------------------------------
+    # Sources
+    # ------------------------------------------------------------------
+    sources_section:
+      type: section
+      title: Sources
+      text: Select which sources to check on every request. Checked in the order shown.
+
+    sources:
+      type: checkboxes
+      label: Active Sources
+      help: "Check all sources you want to use. API keys must be configured below."
+      use: keys
+      default:
+        local: true
+        abuseipdb_bulk: false
+        crowdsec: false
+        dark_visitors: false
+      options:
+        local: "Local blacklist (SQLite)"
+        abuseipdb_bulk: "AbuseIPDB bulk blacklist (refreshed nightly)"
+        crowdsec: "CrowdSec (CTI cloud or LAPI self-hosted)"
+        dark_visitors: "Known Agents — block AI crawlers by User-Agent"
+
+    # ------------------------------------------------------------------
+    # Whitelist
+    # ------------------------------------------------------------------
+    whitelist_section:
+      type: section
+      title: Whitelist
+      text: "IPs or CIDR ranges that are NEVER blocked. One entry per line. Lines starting with # are comments. Examples: 203.0.113.5, 192.168.0.0/24, 2001:db8::/32"
+
+    whitelist:
+      type: textarea
+      label: Whitelisted IPs / CIDRs
+      help: One IP or CIDR per line. Lines starting with # are ignored.
+      rows: 6
+      placeholder: "127.0.0.1\n::1\n# 192.168.0.0/24"
+
+    trusted_proxies:
+      type: textarea
+      label: Trusted Proxies (IPs / CIDRs)
+      help: "Reverse-proxy/CDN IPs allowed to set client-IP headers (CF-Connecting-IP, X-Real-IP, X-Forwarded-For). One IP or CIDR per line. Leave empty to trust only the direct connection (REMOTE_ADDR). Set this when behind Cloudflare, nginx, or a load balancer — otherwise client IPs can be spoofed."
+      rows: 4
+      placeholder: "# Cloudflare ranges, e.g.\n# 173.245.48.0/20\n# 103.21.244.0/22"
+
+    # ------------------------------------------------------------------
+    # Blacklist
+    # ------------------------------------------------------------------
+    blacklist_section:
+      type: section
+      title: Blacklist Settings
+
+    enable_blacklisting:
+      type: toggle
+      label: Enable Blacklisting
+      help: Block requests from IPs found in any enabled source
+      highlight: 1
+      default: 1
+      options:
+        1: PLUGIN_ADMIN.ENABLED
+        0: PLUGIN_ADMIN.DISABLED
+      validate:
+        type: bool
+
+    auto_cache:
+      type: toggle
+      label: Auto-refresh AbuseIPDB Bulk List
+      help: Automatically update the AbuseIPDB bulk blacklist nightly (02:45)
+      highlight: 0
+      default: 0
+      options:
+        1: PLUGIN_ADMIN.ENABLED
+        0: PLUGIN_ADMIN.DISABLED
+      validate:
+        type: bool
+
+    auto_clean:
+      type: toggle
+      label: Auto-clean Local Blacklist
+      help: Automatically trim the local blacklist and vacuum the database nightly (02:35)
+      highlight: 0
+      default: 0
+      options:
+        1: PLUGIN_ADMIN.ENABLED
+        0: PLUGIN_ADMIN.DISABLED
+      validate:
+        type: bool
+
+    auto_clean_limit:
+      type: number
+      label: Auto-clean Retention Limit
+      help: Maximum number of IPs to keep in the local blacklist after auto-clean
+      default: 10000
+      validate:
+        type: int
+        min: 100
+        max: 1000000
+
+    local_ttl:
+      type: number
+      label: Local Blacklist TTL (seconds)
+      help: "Automatically expire local blacklist entries after this many seconds. 0 = permanent. Default: 86400 (24 hours)."
+      default: 86400
+      validate:
+        type: int
+        min: 0
+
+    # ------------------------------------------------------------------
+    # AbuseIPDB
+    # ------------------------------------------------------------------
+    abuseipdb_section:
+      type: section
+      title: AbuseIPDB
+      text: "Sign up at https://www.abuseipdb.com/ for a free API key."
+
+    abuseipdb.api_key:
+      type: text
+      label: AbuseIPDB API Key
+      placeholder: your_api_key_here
+      help: Required for AbuseIPDB bulk list and reporting
+
+    abuseipdb.bulk_limit:
+      type: number
+      label: Bulk List Size Limit
+      help: Maximum number of IPs to download from AbuseIPDB bulk blacklist
+      default: 10000
+      validate:
+        type: int
+        min: 1000
+        max: 500000
+
+    # ------------------------------------------------------------------
+    # CrowdSec
+    # ------------------------------------------------------------------
+    crowdsec_section:
+      type: section
+      title: CrowdSec
+      text: "CTI mode uses the cloud API (https://www.crowdsec.net/). LAPI mode requires a self-hosted CrowdSec agent."
+
+    crowdsec.mode:
+      type: select
+      label: CrowdSec Mode
+      default: cti
+      options:
+        cti: "CTI – Cloud API (no local agent required)"
+        lapi: "LAPI – Self-hosted CrowdSec agent"
+
+    crowdsec.cti_api_key:
+      type: text
+      label: CrowdSec CTI API Key
+      placeholder: your_cti_api_key
+      help: "Obtain from https://app.crowdsec.net/ → Console → CTI API Keys"
+
+    crowdsec.cti_score_threshold:
+      type: number
+      label: CTI Score Threshold
+      help: "Block IPs with an overall CrowdSec score at or above this value (0–5). Recommended: 3."
+      default: 3
+      validate:
+        type: int
+        min: 1
+        max: 5
+
+    crowdsec.cti_cache_ttl:
+      type: number
+      label: CTI Cache TTL (seconds)
+      help: "How long to cache CTI results. Free plan allows 50 checks/day — set this to at least 1800 (30 min). Default 6 hours (21600)."
+      default: 21600
+      validate:
+        type: int
+        min: 300
+
+    crowdsec.lapi_url:
+      type: text
+      label: LAPI URL
+      placeholder: 'http://localhost:8080'
+      help: Base URL of your CrowdSec Local API agent
+
+    crowdsec.lapi_api_key:
+      type: text
+      label: LAPI API Key
+      placeholder: your_bouncer_api_key
+      help: "Generate with: cscli bouncers add hulk-bouncer"
+
+    crowdsec.lapi_cache_ttl:
+      type: number
+      label: LAPI Cache TTL (seconds)
+      help: How long to cache LAPI decision results
+      default: 60
+      validate:
+        type: int
+        min: 10
+
+    # ------------------------------------------------------------------
+    # Known Agents / Dark Visitors
+    # ------------------------------------------------------------------
+    dark_visitors_section:
+      type: section
+      title: Known Agents (AI Crawler Blocking)
+      text: "Blocks AI crawlers by User-Agent string. Data provided by Known Agents (formerly Dark Visitors) — https://www.knownagents.com/"
+
+    dark_visitors.api_key:
+      type: text
+      label: Known Agents API Key
+      placeholder: your_api_key_here
+      help: "Sign up at https://www.knownagents.com/ to get an API key. The UA list is updated daily via the Grav scheduler."
+
+    dark_visitors.agent_types:
+      type: checkboxes
+      label: Agent Types to Block
+      use: keys
+      default:
+        AI Assistant: true
+        AI Data Scraper: true
+        AI Search Crawler: true
+        Undocumented AI Agent: true
+      options:
+        AI Assistant: "AI Assistant (ChatGPT, Claude, Gemini crawlers)"
+        AI Data Scraper: "AI Data Scraper (training data harvesters)"
+        AI Search Crawler: "AI Search Crawler (Perplexity, You.com, etc.)"
+        Undocumented AI Agent: "Undocumented AI Agent"
+
+    dark_visitors.cache_ttl:
+      type: number
+      label: UA List Cache TTL (seconds)
+      help: How often to refresh the Known Agents UA list (default 24 hours)
+      default: 86400
+      validate:
+        type: int
+        min: 3600
+
+    # ------------------------------------------------------------------
+    # URI Filtering
+    # ------------------------------------------------------------------
+    filtering_section:
+      type: section
+      title: URI Filtering
+      text: "Match request paths with regex patterns. Matching IPs are auto-added to the local blacklist and blocked. Lines starting with # are comments."
+
+    enable_filtering:
+      type: toggle
+      label: Enable URI Filtering
+      help: Intercept abusive requests based on URI patterns (e.g. web shell probes, .env access)
+      highlight: 1
+      default: 0
+      options:
+        1: PLUGIN_ADMIN.ENABLED
+        0: PLUGIN_ADMIN.DISABLED
+      validate:
+        type: bool
+
+    enable_reporting:
+      type: toggle
+      label: Auto-report Filtered IPs to AbuseIPDB
+      help: Automatically report IPs that match URI filters (requires AbuseIPDB API key)
+      highlight: 0
+      default: 0
+      options:
+        1: PLUGIN_ADMIN.ENABLED
+        0: PLUGIN_ADMIN.DISABLED
+      validate:
+        type: bool
+
+    filters:
+      type: editor
+      style: vertical
+      label: Filter Patterns
+      help: "One regex pattern per line. Lines starting with # are ignored. Example: \\.env$"
+      autofocus: false
+      codemirror:
+        lineNumbers: true
+        lint: false
+        mode: 'simple'
+        resizer: true
+        styleActiveLine: true
+      placeholder: |
+        # Web shell probe
+        wso\.php
+        # .env file access
+        \.env$

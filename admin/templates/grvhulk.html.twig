@@ -1,0 +1,173 @@
+{% extends 'partials/base.html.twig' %}
+
+{% block content %}
+<div class="admin-pages">
+<div class="grvhulk-admin">
+
+<div class="admin-block">
+  <h1><i class="fa fa-shield"></i> Grvhulk Security</h1>
+  <p>
+    <a href="{{ base_url_relative }}/admin/plugins/hulk" class="button">
+      <i class="fa fa-cog"></i> Settings
+    </a>
+  </p>
+</div>
+
+{# --- Statistics --- #}
+<div class="admin-block">
+  <h2>Statistics</h2>
+  <div id="grvhulk-stats">
+    <p><i class="fa fa-spinner fa-spin"></i> Loading…</p>
+  </div>
+</div>
+
+{# --- IP Management --- #}
+<div class="admin-block">
+  <h2>Local Blacklist — Search / Add / Remove</h2>
+  <div class="grvhulk-ip-form">
+    <input type="text" id="grvhulk-ip-input" placeholder="192.168.1.1" style="width:200px;" />
+    <input type="text" id="grvhulk-reason-input" placeholder="Reason (optional)" style="width:200px;" />
+    <button class="button" onclick="grvhulkAction('search')"><i class="fa fa-search"></i> Search</button>
+    <button class="button" onclick="grvhulkAction('add')"><i class="fa fa-plus"></i> Add</button>
+    <button class="button" onclick="grvhulkAction('remove')"><i class="fa fa-trash"></i> Remove</button>
+  </div>
+  <div id="grvhulk-action-result" style="margin-top:1em; font-weight:bold;"></div>
+</div>
+
+{# --- Recent entries --- #}
+<div class="admin-block">
+  <h2>
+    Last 25 Blocked IPs
+    <button class="button" onclick="loadLast25()" style="float:right;"><i class="fa fa-refresh"></i></button>
+  </h2>
+  <div id="grvhulk-last25">
+    <p><i class="fa fa-spinner fa-spin"></i> Loading…</p>
+  </div>
+</div>
+
+</div>{# /grvhulk-admin #}
+</div>{# /admin-pages #}
+
+<style>
+.grvhulk-admin .admin-block { background:#fff; border:1px solid #ddd; border-radius:4px; padding:1.5em; margin-bottom:1.5em; }
+.grvhulk-admin h1 { margin-top:0; }
+.grvhulk-admin h2 { font-size:1.1em; margin-top:0; border-bottom:1px solid #eee; padding-bottom:.5em; }
+.grvhulk-admin table { width:100%; border-collapse:collapse; font-size:.9em; }
+.grvhulk-admin table th { text-align:left; padding:.4em .8em; background:#f5f5f5; border-bottom:2px solid #ddd; }
+.grvhulk-admin table td { padding:.4em .8em; border-bottom:1px solid #f0f0f0; }
+.grvhulk-admin .stat-grid { display:flex; flex-wrap:wrap; gap:1em; }
+.grvhulk-admin .stat-box { background:#f9f9f9; border:1px solid #e0e0e0; border-radius:4px; padding:1em 1.5em; min-width:150px; text-align:center; }
+.grvhulk-admin .stat-box .stat-num { font-size:2em; font-weight:bold; color:#333; }
+.grvhulk-admin .stat-box .stat-label { font-size:.8em; color:#888; }
+.grvhulk-ip-form input { margin-right:.5em; padding:.4em; border:1px solid #ccc; border-radius:3px; }
+</style>
+
+<script>
+(function () {
+  var API = '{{ base_url_relative }}/admin/grvhulk/data';
+  var nonce = '{{ admin.nonce }}';
+
+  // Escape text before inserting into innerHTML to prevent stored XSS.
+  function esc(s) {
+    return String(s == null ? '' : s).replace(/[&<>"']/g, function(c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
+  }
+
+  function post(action, extra, cb) {
+    var body = Object.assign({ action: action, 'admin-nonce': nonce }, extra);
+    fetch(API, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'X-Admin-Nonce': nonce },
+      body: Object.entries(body).map(([k, v]) => encodeURIComponent(k) + '=' + encodeURIComponent(v)).join('&')
+    })
+    .then(function(r) { return r.json(); })
+    .then(cb)
+    .catch(function(e) { console.error('Grvhulk API error', e); });
+  }
+
+  function loadStats() {
+    post('stats', {}, function(data) {
+      var updated_bulk = data.abuseipdb_updated
+        ? new Date(data.abuseipdb_updated * 1000).toLocaleString()
+        : 'Never';
+      var updated_dv = data.dark_visitors_updated
+        ? new Date(data.dark_visitors_updated * 1000).toLocaleString()
+        : 'Never';
+      document.getElementById('grvhulk-stats').innerHTML =
+        '<div class="stat-grid">' +
+        '<div class="stat-box"><div class="stat-num">' + (data.local_count || 0) + '</div><div class="stat-label">Local Blacklist</div></div>' +
+        '<div class="stat-box"><div class="stat-num">' + (data.abuseipdb_bulk_count || 0) + '</div><div class="stat-label">AbuseIPDB Bulk<br><small>' + updated_bulk + '</small></div></div>' +
+        '<div class="stat-box"><div class="stat-num">' + (data.dark_visitors_count || 0) + '</div><div class="stat-label">AI Crawler UAs<br><small>' + updated_dv + '</small></div></div>' +
+        '<div class="stat-box"><div class="stat-num">' + (data.db_size || '?') + '</div><div class="stat-label">DB Size</div></div>' +
+        '</div>';
+    });
+  }
+
+  window.loadLast25 = function() {
+    document.getElementById('grvhulk-last25').innerHTML = '<p><i class="fa fa-spinner fa-spin"></i> Loading…</p>';
+    post('last-25', {}, function(data) {
+      if (!data.length) {
+        document.getElementById('grvhulk-last25').innerHTML = '<p><em>No entries.</em></p>';
+        return;
+      }
+      var rows = data.map(function(e) {
+        return '<tr>' +
+          '<td>' + esc(e.ip) + '</td>' +
+          '<td>' + esc(e.reason || '') + '</td>' +
+          '<td>' + new Date(e.added_at * 1000).toLocaleString() + '</td>' +
+          '<td><button class="button" onclick="removeIp(\'' + esc(e.ip) + '\')"><i class="fa fa-trash"></i></button></td>' +
+          '</tr>';
+      });
+      document.getElementById('grvhulk-last25').innerHTML =
+        '<table><thead><tr><th>IP</th><th>Reason</th><th>Added</th><th></th></tr></thead><tbody>' +
+        rows.join('') + '</tbody></table>';
+    });
+  };
+
+  window.removeIp = function(ip) {
+    if (!confirm('Remove ' + ip + ' from local blacklist?')) return;
+    post('remove', { ip: ip }, function() {
+      loadStats();
+      loadLast25();
+    });
+  };
+
+  window.grvhulkAction = function(action) {
+    var ip = document.getElementById('grvhulk-ip-input').value.trim();
+    var reason = document.getElementById('grvhulk-reason-input').value.trim();
+    var resultEl = document.getElementById('grvhulk-action-result');
+    resultEl.textContent = '';
+
+    if (!ip && action !== 'last-25') {
+      resultEl.textContent = 'Please enter an IP address.';
+      return;
+    }
+
+    post(action, { ip: ip, reason: reason || 'Manual' }, function(data) {
+      if (action === 'search') {
+        if (data.found) {
+          resultEl.style.color = '#c00';
+          resultEl.textContent = ip + ' is in the local blacklist. Reason: ' + (data.entry && data.entry.reason ? data.entry.reason : '(none)');
+        } else {
+          resultEl.style.color = '#090';
+          resultEl.textContent = ip + ' is NOT in the local blacklist.';
+        }
+      } else if (data.success) {
+        resultEl.style.color = '#090';
+        resultEl.textContent = 'Done.';
+        loadStats();
+        loadLast25();
+      } else if (data.error) {
+        resultEl.style.color = '#c00';
+        resultEl.textContent = 'Error: ' + data.error;
+      }
+    });
+  };
+
+  // Init
+  loadStats();
+  loadLast25();
+})();
+</script>
+{% endblock %}

@@ -1,0 +1,190 @@
+enabled: true
+logging: false
+response: 403
+
+# Sources checked on every request (in order)
+sources:
+  local: true
+  abuseipdb_bulk: false
+  crowdsec: false
+  dark_visitors: false
+
+# Whitelist: IPs/CIDRs that are NEVER blocked (checked before all sources)
+# One entry per line. Lines starting with # are ignored.
+whitelist: |
+  127.0.0.1
+  ::1
+
+# Trusted reverse-proxy / CDN IPs or CIDRs. Forwarding headers
+# (CF-Connecting-IP, X-Real-IP, X-Forwarded-For) are honored ONLY when the
+# direct connection (REMOTE_ADDR) matches one of these. Empty = trust no
+# forwarding headers and use REMOTE_ADDR only. Set this if you sit behind
+# Cloudflare, nginx, or a load balancer — otherwise client IPs can be spoofed.
+trusted_proxies: ''
+
+# AbuseIPDB settings (https://www.abuseipdb.com/)
+abuseipdb:
+  api_key: ~
+  bulk_limit: 10000
+
+# CrowdSec settings (https://www.crowdsec.net/)
+crowdsec:
+  mode: cti
+  cti_api_key: ~
+  cti_score_threshold: 3
+  cti_cache_ttl: 21600
+  lapi_url: 'http://localhost:8080'
+  lapi_api_key: ~
+  lapi_cache_ttl: 60
+
+# Known Agents / Dark Visitors (https://www.knownagents.com/)
+dark_visitors:
+  api_key: ~
+  agent_types:
+    - 'AI Assistant'
+    - 'AI Data Scraper'
+    - 'AI Search Crawler'
+    - 'Undocumented AI Agent'
+  cache_ttl: 86400
+
+# Scheduler automation
+auto_cache: false
+auto_clean: false
+auto_clean_limit: 10000
+local_ttl: 86400
+
+# Request filtering
+enable_blacklisting: true
+enable_filtering: false
+enable_reporting: false
+
+# URI filter patterns — one regex per line, # = comment
+# Lines beginning with # are ignored.
+# Matching a pattern auto-adds the source IP to the local blacklist and blocks the request.
+#
+# SECTION 1: Always safe to block (unambiguously malicious probes)
+# Enable these on any site.
+filters: |
+  # --- Web Shells ---
+  wso\.php
+  shell\.php
+  alfa\.php
+  alfa-rex\.php
+  b374k\.php
+  r57\.php
+  c99\.php
+  c100\.php
+  indoxploit\.php
+  priv8\.php
+  passthru\.php
+  FilesMan\.php
+  cmd\.php
+  webshell\.php
+
+  # --- Environment / Credential File Probes ---
+  /\.env$
+  /\.env\.backup
+  /\.env\.bak
+  /\.env\.old
+  /\.env\.local
+  /\.env\.prod
+  /\.env\.staging
+  /\.env\.example
+
+  # --- VCS / Source Code Exposure ---
+  /\.git/config
+  /\.git/HEAD
+  /\.git/COMMIT_EDITMSG
+  /\.svn/entries
+  /\.svn/wc\.db
+  /\.hg/
+
+  # --- Credential & Config File Probes ---
+  /\.aws/credentials
+  /\.htpasswd
+  /web\.config$
+
+  # --- Log4Shell / JNDI Injection ---
+  \$\{jndi:
+  \$\{.*:\/\/
+
+  # --- Cloud Metadata SSRF Probes ---
+  169\.254\.169\.254
+  /latest/meta-data
+  /computeMetadata/v1
+  /metadata/instance
+  /opc/v1/instance
+
+  # --- Known RCE Exploits ---
+  /_ignition/execute-solution
+  /vendor/phpunit/phpunit/src/Util/PHP/eval-stdin\.php
+  /Drupal/POC\.php
+  /config/prod/security\.yml
+
+  # --- Dockerrun / Cloud App Config Probes ---
+  /Dockerrun\.aws\.json
+  /docker-compose\.ya?ml$
+  /\.dockerignore$
+
+  # --- Common Vulnerability Scanners / Auto-Exploit Paths ---
+  /cgi-bin/luci/;stok=
+  /cgi-bin/login\.cgi
+  /cgi-bin/config\.exp
+  /setup\.cgi
+  /boaform/admin/formLogin
+
+  # --- WordPress Attack Patterns ---
+  /wp-login\.php
+  /xmlrpc\.php
+  /wp-content/plugins/[\w-]+/.*\.php\?
+
+  # --- phpinfo / Debug Exposure ---
+  /phpinfo\.php
+  /info\.php
+  /test\.php
+  /php\.php
+
+  # SECTION 2: Site-dependent — uncomment only if you do NOT use these on your site
+
+  # --- AI Service API Probes (only relevant if your site is not an AI API) ---
+  # /v1/chat/completions
+  # /api/generate
+  # /api/chat
+  # /api/tags
+  # /api/pull
+  # /ollama/
+
+  # --- API Documentation Endpoints ---
+  # /swagger-ui\.html
+  # /swagger\.json
+  # /api-docs
+  # /openapi\.json
+  # /v2/api-docs
+
+  # --- GraphQL (only if you do not expose GraphQL) ---
+  # /graphql$
+
+  # --- Admin / Debug Panels (only if you do not use these) ---
+  # /adminer\.php
+  # /adminer/
+  # /phpmyadmin/
+  # /pma/
+  # /_debugbar/
+  # /telescope/
+  # /horizon/
+
+  # --- Spring Boot Actuator (only for non-Java sites) ---
+  # /actuator/
+  # /actuator/env
+  # /actuator/heapdump
+
+  # --- Server Status Pages (only if not intentionally exposed) ---
+  # /server-status
+  # /server-info
+  # /nginx_status
+
+  # --- Dependency / Build Files ---
+  /composer\.lock$
+  /package\.json$
+  /yarn\.lock$
+  /package-lock\.json$

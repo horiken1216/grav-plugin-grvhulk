@@ -1,0 +1,10 @@
+# Composer dependencies (installed via composer install)
+/vendor/
+
+# PHPUnit cache
+.phpunit.result.cache
+
+# Agent context files (local only — not tracked)
+CLAUDE.md
+AGENTS.md
+GEMINI.md
