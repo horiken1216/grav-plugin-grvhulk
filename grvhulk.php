@@ -320,6 +320,17 @@ class GrvhulkPlugin extends Plugin
                 $data = ['success' => true];
                 break;
 
+            case 'history':
+                $limit  = min((int)($body['limit'] ?? 50), 200);
+                $offset = max((int)($body['offset'] ?? 0), 0);
+                $data   = [
+                    'entries' => HulkDatabase::getHistory($db, $limit, $offset),
+                    'total'   => HulkDatabase::getHistoryCount($db),
+                    'limit'   => $limit,
+                    'offset'  => $offset,
+                ];
+                break;
+
             default:
                 $request->setResponse(new Response(400, [], json_encode(['error' => 'Unknown action: ' . $action])));
                 return;

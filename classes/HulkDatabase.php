@@ -12,7 +12,7 @@ use Grav\Common\Filesystem\Folder;
 class HulkDatabase
 {
     /** Bump when the schema or a migration changes; gates createSchema(). */
-    private const SCHEMA_VERSION = 3;
+    private const SCHEMA_VERSION = 4;
 
     private static ?SQLite3 $instance = null;
 
@@ -116,9 +116,22 @@ class HulkDatabase
 
         $db->exec('CREATE INDEX IF NOT EXISTS idx_ip_cache_expires ON ip_cache(expires_at)');
 
+        $db->exec('
+            CREATE TABLE IF NOT EXISTS history (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                ip TEXT NOT NULL,
+                action TEXT NOT NULL,
+                reason TEXT DEFAULT \'\',
+                is_manual INTEGER NOT NULL DEFAULT 0,
+                acted_at INTEGER DEFAULT (strftime(\'%s\',\'now\'))
+            )
+        ');
+
+        $db->exec('CREATE INDEX IF NOT EXISTS idx_history_acted_at ON history(acted_at DESC)');
+
         // Migrations for DBs created before the current version (CREATE IF NOT
         // EXISTS won't alter an existing table):
-        //   v2: `local.is_manual`   v3: `report_queue.attempts`
+        //   v2: `local.is_manual`   v3: `report_queue.attempts`   v4: `history`
         self::addColumnIfMissing($db, 'local', 'is_manual', 'INTEGER NOT NULL DEFAULT 0');
         self::addColumnIfMissing($db, 'report_queue', 'attempts', 'INTEGER NOT NULL DEFAULT 0');
 
@@ -169,6 +182,8 @@ class HulkDatabase
         $stmt->bindValue(':manual', $manual ? 1 : 0, SQLITE3_INTEGER);
         $stmt->execute();
 
+        $inserted = $db->changes() > 0;
+
         // A manual add promotes an existing auto entry (and refreshes its reason)
         // so the block becomes exempt from TTL expiry and auto-clean trimming.
         if ($manual) {
@@ -177,13 +192,57 @@ class HulkDatabase
             $stmt->bindValue(':ip', $ip, SQLITE3_TEXT);
             $stmt->execute();
         }
+
+        // Record only new blocks to avoid flooding history with repeated auto-hits.
+        if ($inserted) {
+            self::addHistoryEntry($db, $ip, 'block', $reason, $manual);
+        }
     }
 
     public static function removeIpFromLocal(SQLite3 $db, string $ip): void
     {
+        // Fetch existing entry before deleting so we can record the reason.
+        $stmt = $db->prepare('SELECT reason, is_manual FROM local WHERE ip = :ip LIMIT 1');
+        $stmt->bindValue(':ip', $ip, SQLITE3_TEXT);
+        $result = $stmt->execute();
+        $existing = $result->fetchArray(SQLITE3_ASSOC);
+
         $stmt = $db->prepare('DELETE FROM local WHERE ip = :ip');
         $stmt->bindValue(':ip', $ip, SQLITE3_TEXT);
         $stmt->execute();
+
+        if ($db->changes() > 0 && $existing) {
+            self::addHistoryEntry($db, $ip, 'unblock', $existing['reason'] ?? '', (bool)($existing['is_manual'] ?? false));
+        }
+    }
+
+    public static function addHistoryEntry(SQLite3 $db, string $ip, string $action, string $reason = '', bool $manual = false): void
+    {
+        $stmt = $db->prepare('INSERT INTO history (ip, action, reason, is_manual) VALUES (:ip, :action, :reason, :manual)');
+        $stmt->bindValue(':ip', $ip, SQLITE3_TEXT);
+        $stmt->bindValue(':action', $action, SQLITE3_TEXT);
+        $stmt->bindValue(':reason', $reason, SQLITE3_TEXT);
+        $stmt->bindValue(':manual', $manual ? 1 : 0, SQLITE3_INTEGER);
+        $stmt->execute();
+    }
+
+    public static function getHistory(SQLite3 $db, int $limit = 50, int $offset = 0): array
+    {
+        $stmt = $db->prepare('SELECT id, ip, action, reason, is_manual, acted_at FROM history ORDER BY id DESC LIMIT :limit OFFSET :offset');
+        $stmt->bindValue(':limit', $limit, SQLITE3_INTEGER);
+        $stmt->bindValue(':offset', $offset, SQLITE3_INTEGER);
+        $result = $stmt->execute();
+        $rows = [];
+        while ($row = $result->fetchArray(SQLITE3_ASSOC)) {
+            $rows[] = $row;
+        }
+        return $rows;
+    }
+
+    public static function getHistoryCount(SQLite3 $db): int
+    {
+        $result = $db->query('SELECT COUNT(1) FROM history');
+        return (int)$result->fetchArray(SQLITE3_NUM)[0];
     }
 
     public static function getLocalCount(SQLite3 $db): int
