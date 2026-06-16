@@ -61,7 +61,7 @@ class GrvhulkPlugin extends Plugin
             'onSchedulerInitialized' => ['onSchedulerInitialized', 0],
         ]);
 
-        if (!$this->isAdmin() || !$this->grav['user']->authenticated) {
+        if (!$this->isAdmin()) {
             return;
         }
 
