@@ -34,15 +34,16 @@
   <div id="grvhulk-action-result" style="margin-top:1em; font-weight:bold;"></div>
 </div>
 
-{# --- Recent entries --- #}
+{# --- Blocked IPs (paginated) --- #}
 <div class="admin-block">
   <h2>
-    Last 25 Blocked IPs
-    <button class="button" onclick="loadLast25()" style="float:right;"><i class="fa fa-refresh"></i></button>
+    Blocked IPs
+    <button class="button" onclick="loadLocalList(0)" style="float:right;"><i class="fa fa-refresh"></i></button>
   </h2>
-  <div id="grvhulk-last25">
+  <div id="grvhulk-local-list">
     <p><i class="fa fa-spinner fa-spin"></i> Loading…</p>
   </div>
+  <div id="grvhulk-local-pager" style="margin-top:.8em; text-align:center;"></div>
 </div>
 
 {# --- Block History --- #}
@@ -121,24 +122,32 @@
     });
   }
 
-  window.loadLast25 = function() {
-    document.getElementById('grvhulk-last25').innerHTML = '<p><i class="fa fa-spinner fa-spin"></i> Loading…</p>';
-    post('last-25', {}, function(data) {
-      if (!data.length) {
-        document.getElementById('grvhulk-last25').innerHTML = '<p><em>No entries.</em></p>';
+  var LOCAL_LIMIT = 50;
+  var localCurrentOffset = 0;
+
+  window.loadLocalList = function(offset) {
+    localCurrentOffset = offset || 0;
+    document.getElementById('grvhulk-local-list').innerHTML = '<p><i class="fa fa-spinner fa-spin"></i> Loading…</p>';
+    document.getElementById('grvhulk-local-pager').innerHTML = '';
+    post('local-list', { limit: LOCAL_LIMIT, offset: localCurrentOffset }, function(data) {
+      if (!data.entries || !data.entries.length) {
+        document.getElementById('grvhulk-local-list').innerHTML = '<p><em>No blocked IPs.</em></p>';
         return;
       }
-      var rows = data.map(function(e) {
+      var rows = data.entries.map(function(e) {
+        var manual = e.is_manual ? '<span class="badge-manual">manual</span>' : '';
         return '<tr>' +
           '<td>' + esc(e.ip) + '</td>' +
-          '<td>' + esc(e.reason || '') + '</td>' +
+          '<td>' + esc(e.reason || '') + manual + '</td>' +
           '<td>' + new Date(e.added_at * 1000).toLocaleString() + '</td>' +
           '<td><button class="button" onclick="removeIp(\'' + esc(e.ip) + '\')"><i class="fa fa-trash"></i></button></td>' +
           '</tr>';
       });
-      document.getElementById('grvhulk-last25').innerHTML =
+      document.getElementById('grvhulk-local-list').innerHTML =
         '<table><thead><tr><th>IP</th><th>Reason</th><th>Added</th><th></th></tr></thead><tbody>' +
         rows.join('') + '</tbody></table>';
+
+      renderPager('grvhulk-local-pager', data.total, LOCAL_LIMIT, localCurrentOffset, loadLocalList);
     });
   };
 
@@ -146,7 +155,7 @@
     if (!confirm('Remove ' + ip + ' from local blacklist?')) return;
     post('remove', { ip: ip }, function() {
       loadStats();
-      loadLast25();
+      loadLocalList(localCurrentOffset);
     });
   };
 
@@ -156,7 +165,7 @@
     var resultEl = document.getElementById('grvhulk-action-result');
     resultEl.textContent = '';
 
-    if (!ip && action !== 'last-25') {
+    if (!ip) {
       resultEl.textContent = 'Please enter an IP address.';
       return;
     }
@@ -174,13 +183,31 @@
         resultEl.style.color = '#090';
         resultEl.textContent = 'Done.';
         loadStats();
-        loadLast25();
+        loadLocalList(localCurrentOffset);
       } else if (data.error) {
         resultEl.style.color = '#c00';
         resultEl.textContent = 'Error: ' + data.error;
       }
     });
   };
+
+  function renderPager(containerId, total, limit, offset, loadFn) {
+    var pages   = Math.ceil(total / limit);
+    var current = Math.floor(offset / limit);
+    var el = document.getElementById(containerId);
+    if (pages <= 1) { el.innerHTML = ''; return; }
+    var btns = '';
+    btns += '<button class="grvhulk-history-pager-btn" onclick="' + loadFn.name + '(' + Math.max(0, (current - 1) * limit) + ')" ' + (current === 0 ? 'disabled' : '') + '>&lsaquo; Prev</button>';
+    var start = Math.max(0, current - 2);
+    var end   = Math.min(pages - 1, current + 2);
+    for (var p = start; p <= end; p++) {
+      var active = p === current ? ' style="font-weight:bold; background:#eef;"' : '';
+      btns += '<button class="grvhulk-history-pager-btn"' + active + ' onclick="' + loadFn.name + '(' + (p * limit) + ')">' + (p + 1) + '</button>';
+    }
+    btns += '<button class="grvhulk-history-pager-btn" onclick="' + loadFn.name + '(' + Math.min((pages - 1) * limit, (current + 1) * limit) + ')" ' + (current >= pages - 1 ? 'disabled' : '') + '>Next &rsaquo;</button>';
+    btns += '<span style="margin-left:.5em; color:#888; font-size:.85em;">' + total + ' total</span>';
+    el.innerHTML = btns;
+  }
 
   var HISTORY_LIMIT = 50;
 
@@ -209,29 +236,13 @@
         '<table><thead><tr><th>IP</th><th>Action</th><th>Reason</th><th>Date</th></tr></thead><tbody>' +
         rows.join('') + '</tbody></table>';
 
-      // Pagination
-      var total = data.total;
-      var pages  = Math.ceil(total / HISTORY_LIMIT);
-      var current = Math.floor(offset / HISTORY_LIMIT);
-      if (pages > 1) {
-        var btns = '';
-        btns += '<button class="grvhulk-history-pager-btn" onclick="loadHistory(' + Math.max(0, (current - 1) * HISTORY_LIMIT) + ')" ' + (current === 0 ? 'disabled' : '') + '>&lsaquo; Prev</button>';
-        var start = Math.max(0, current - 2);
-        var end   = Math.min(pages - 1, current + 2);
-        for (var p = start; p <= end; p++) {
-          var active = p === current ? ' style="font-weight:bold; background:#eef;"' : '';
-          btns += '<button class="grvhulk-history-pager-btn"' + active + ' onclick="loadHistory(' + (p * HISTORY_LIMIT) + ')">' + (p + 1) + '</button>';
-        }
-        btns += '<button class="grvhulk-history-pager-btn" onclick="loadHistory(' + Math.min((pages - 1) * HISTORY_LIMIT, (current + 1) * HISTORY_LIMIT) + ')" ' + (current >= pages - 1 ? 'disabled' : '') + '>Next &rsaquo;</button>';
-        btns += '<span style="margin-left:.5em; color:#888; font-size:.85em;">' + total + ' total</span>';
-        document.getElementById('grvhulk-history-pager').innerHTML = btns;
-      }
+      renderPager('grvhulk-history-pager', data.total, HISTORY_LIMIT, offset, loadHistory);
     });
   };
 
   // Init
   loadStats();
-  loadLast25();
+  loadLocalList(0);
   loadHistory(0);
 })();
 </script>

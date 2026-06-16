@@ -263,6 +263,19 @@ class HulkDatabase
         return $rows;
     }
 
+    public static function getLocalPaginated(SQLite3 $db, int $limit = 50, int $offset = 0): array
+    {
+        $stmt = $db->prepare('SELECT ip, reason, is_manual, added_at FROM local ORDER BY rowid DESC LIMIT :limit OFFSET :offset');
+        $stmt->bindValue(':limit', $limit, SQLITE3_INTEGER);
+        $stmt->bindValue(':offset', $offset, SQLITE3_INTEGER);
+        $result = $stmt->execute();
+        $rows = [];
+        while ($row = $result->fetchArray(SQLITE3_ASSOC)) {
+            $rows[] = $row;
+        }
+        return $rows;
+    }
+
     public static function searchLocal(SQLite3 $db, string $ip): ?array
     {
         $stmt = $db->prepare('SELECT ip, reason, is_manual, added_at FROM local WHERE ip = :ip LIMIT 1');

@@ -297,6 +297,17 @@ class GrvhulkPlugin extends Plugin
                 $data = HulkDatabase::getLastNLocal($db, 25);
                 break;
 
+            case 'local-list':
+                $limit  = min((int)($body['limit'] ?? 50), 200);
+                $offset = max((int)($body['offset'] ?? 0), 0);
+                $data   = [
+                    'entries' => HulkDatabase::getLocalPaginated($db, $limit, $offset),
+                    'total'   => HulkDatabase::getLocalCount($db),
+                    'limit'   => $limit,
+                    'offset'  => $offset,
+                ];
+                break;
+
             case 'search':
                 $entry = HulkDatabase::searchLocal($db, $body['ip'] ?? '');
                 $data  = ['found' => $entry !== null, 'entry' => $entry];
