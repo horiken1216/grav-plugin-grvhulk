@@ -1,5 +1,16 @@
 # Changelog
 
+# v1.1.0
+## 06/17/2026
+
+1. [](#new)
+    * Block history: every block/unblock is recorded in a new `history` table (IP, action, reason, manual flag, timestamp) and shown in the Admin UI with colour-coded badges and pagination
+    * Blocked IP list in the Admin UI is now fully paginated (all entries) instead of only the last 25
+    * Statistics dashboard shows the history entry count
+    * Configurable history retention via `history_ttl` (default 30 days) and `history_max_rows` (default 50000); pruned nightly by a dedicated scheduler job that runs independently of `auto_clean`
+2. [](#bugfix)
+    * Fixed the GRVHulk shield link not appearing in the Admin sidebar — the admin menu/template listeners were gated on a user-session check that runs before the session is resolved in `onPluginsInitialized`
+
 # v1.0.0
 ## 06/14/2026
 
