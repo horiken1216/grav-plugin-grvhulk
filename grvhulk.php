@@ -429,6 +429,13 @@ class GrvhulkPlugin extends Plugin
             $job->at('35 2 * * *');
         }
 
+        // History pruning runs independently of auto_clean: the audit log is
+        // written on every block/unblock, so it must be bounded even when the
+        // blacklist auto-clean is disabled.
+        $job = $scheduler->addFunction('Grav\Plugin\GrvhulkPlugin::taskPruneHistory', [], 'grvhulk-prune-history');
+        $job->backlink('plugins/grvhulk');
+        $job->at('30 3 * * *');
+
         if (!empty($config['auto_cache']) && !empty($config['sources']['abuseipdb_bulk']) && !empty($config['abuseipdb']['api_key'])) {
             $job = $scheduler->addFunction('Grav\Plugin\GrvhulkPlugin::taskUpdateAbuseipdbBulk', [], 'grvhulk-abuseipdb-cache');
             $job->backlink('plugins/grvhulk');
@@ -488,10 +495,33 @@ class GrvhulkPlugin extends Plugin
         $expired     = HulkDatabase::pruneExpiredLocal($db, $localTtl);
         HulkDatabase::trimLocal($db, $limit);
         HulkDatabase::pruneExpiredCache($db);
+        // Prune history here too so the VACUUM below reclaims its pages, but the
+        // authoritative schedule is the dedicated grvhulk-prune-history job,
+        // which runs even when auto_clean is disabled.
         $histPruned  = HulkDatabase::pruneHistory($db, $historyTtl, $historyMax);
         $db->exec('VACUUM');
 
         echo "Hulk: pruned {$expired} expired local entries (ttl:{$localTtl}s), trimmed to {$limit}, pruned {$histPruned} history rows, vacuumed DB.\n";
+    }
+
+    /**
+     * Prune the block-history audit log on its own schedule. History rows are
+     * written on every block/unblock regardless of auto_clean, so this job must
+     * run independently of it — otherwise the table would grow unbounded for the
+     * default (auto_clean: false) configuration.
+     */
+    public static function taskPruneHistory(): void
+    {
+        $grav    = Grav::instance();
+        $config  = $grav['config']->get('plugins.grvhulk');
+        $dataDir = $grav['locator']->findResource('user://data', true) . '/grvhulk';
+        $db      = HulkDatabase::getInstance($dataDir);
+
+        $historyTtl = (int)($config['history_ttl'] ?? 2592000);
+        $historyMax = (int)($config['history_max_rows'] ?? 50000);
+        $pruned     = HulkDatabase::pruneHistory($db, $historyTtl, $historyMax);
+
+        echo "Hulk: pruned {$pruned} history rows (ttl:{$historyTtl}s, max:{$historyMax}).\n";
     }
 
     public static function taskUpdateAbuseipdbBulk(): void

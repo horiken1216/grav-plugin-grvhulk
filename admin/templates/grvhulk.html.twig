@@ -115,6 +115,7 @@
       document.getElementById('grvhulk-stats').innerHTML =
         '<div class="stat-grid">' +
         '<div class="stat-box"><div class="stat-num">' + (data.local_count || 0) + '</div><div class="stat-label">Local Blacklist</div></div>' +
+        '<div class="stat-box"><div class="stat-num">' + (data.history_count || 0) + '</div><div class="stat-label">History Entries</div></div>' +
         '<div class="stat-box"><div class="stat-num">' + (data.abuseipdb_bulk_count || 0) + '</div><div class="stat-label">AbuseIPDB Bulk<br><small>' + updated_bulk + '</small></div></div>' +
         '<div class="stat-box"><div class="stat-num">' + (data.dark_visitors_count || 0) + '</div><div class="stat-label">AI Crawler UAs<br><small>' + updated_dv + '</small></div></div>' +
         '<div class="stat-box"><div class="stat-num">' + (data.db_size || '?') + '</div><div class="stat-label">DB Size</div></div>' +

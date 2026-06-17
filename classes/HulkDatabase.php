@@ -240,15 +240,18 @@ class HulkDatabase
         $stmt->execute();
         $pruned = $db->changes();
 
-        // Also cap by row count — delete oldest rows beyond the limit.
-        $stmt = $db->prepare(
-            'DELETE FROM history WHERE id NOT IN (
-                SELECT id FROM history ORDER BY id DESC LIMIT :max
-            )'
+        // Also cap by row count — delete everything older than the Nth newest
+        // row. Resolving the cutoff id once (OFFSET on the indexed PK) avoids a
+        // correlated NOT IN subquery scan.
+        $cutoffId = $db->querySingle(
+            'SELECT id FROM history ORDER BY id DESC LIMIT 1 OFFSET ' . max(0, $maxRows - 1)
         );
-        $stmt->bindValue(':max', $maxRows, SQLITE3_INTEGER);
-        $stmt->execute();
-        $pruned += $db->changes();
+        if ($cutoffId !== null) {
+            $stmt = $db->prepare('DELETE FROM history WHERE id < :cutoff_id');
+            $stmt->bindValue(':cutoff_id', $cutoffId, SQLITE3_INTEGER);
+            $stmt->execute();
+            $pruned += $db->changes();
+        }
 
         return $pruned;
     }
@@ -560,6 +563,7 @@ class HulkDatabase
         $dbPath = $dataDir . '/grvhulk.sqlite';
         return [
             'local_count'         => self::getLocalCount($db),
+            'history_count'       => self::getHistoryCount($db),
             'abuseipdb_bulk_count' => self::getAbuseipdbBulkCount($db),
             'dark_visitors_count' => self::getDarkVisitorsCount($db),
             'db_size'             => file_exists($dbPath) ? self::humanFilesize(filesize($dbPath)) : '0B',
