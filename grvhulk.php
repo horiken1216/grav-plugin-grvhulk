@@ -293,10 +293,6 @@ class GrvhulkPlugin extends Plugin
                 $data = HulkDatabase::getStats($db, $dataDir);
                 break;
 
-            case 'last-25':
-                $data = HulkDatabase::getLastNLocal($db, 25);
-                break;
-
             case 'local-list':
                 $limit  = min((int)($body['limit'] ?? 50), 200);
                 $offset = max((int)($body['offset'] ?? 0), 0);
@@ -485,13 +481,17 @@ class GrvhulkPlugin extends Plugin
         $db      = HulkDatabase::getInstance($dataDir);
         $limit   = (int)($config['auto_clean_limit'] ?? 10000);
 
-        $localTtl = (int)($config['local_ttl'] ?? 86400);
-        $expired  = HulkDatabase::pruneExpiredLocal($db, $localTtl);
+        $localTtl    = (int)($config['local_ttl'] ?? 86400);
+        $historyTtl  = (int)($config['history_ttl'] ?? 2592000);
+        $historyMax  = (int)($config['history_max_rows'] ?? 50000);
+
+        $expired     = HulkDatabase::pruneExpiredLocal($db, $localTtl);
         HulkDatabase::trimLocal($db, $limit);
         HulkDatabase::pruneExpiredCache($db);
+        $histPruned  = HulkDatabase::pruneHistory($db, $historyTtl, $historyMax);
         $db->exec('VACUUM');
 
-        echo "Hulk: pruned {$expired} expired local entries (ttl:{$localTtl}s), trimmed to {$limit}, vacuumed DB.\n";
+        echo "Hulk: pruned {$expired} expired local entries (ttl:{$localTtl}s), trimmed to {$limit}, pruned {$histPruned} history rows, vacuumed DB.\n";
     }
 
     public static function taskUpdateAbuseipdbBulk(): void

@@ -216,7 +216,7 @@ class HulkDatabase
         }
     }
 
-    public static function addHistoryEntry(SQLite3 $db, string $ip, string $action, string $reason = '', bool $manual = false): void
+    private static function addHistoryEntry(SQLite3 $db, string $ip, string $action, string $reason = '', bool $manual = false): void
     {
         $stmt = $db->prepare('INSERT INTO history (ip, action, reason, is_manual) VALUES (:ip, :action, :reason, :manual)');
         $stmt->bindValue(':ip', $ip, SQLITE3_TEXT);
@@ -224,6 +224,33 @@ class HulkDatabase
         $stmt->bindValue(':reason', $reason, SQLITE3_TEXT);
         $stmt->bindValue(':manual', $manual ? 1 : 0, SQLITE3_INTEGER);
         $stmt->execute();
+    }
+
+    /**
+     * Prune history entries older than $ttl seconds, then trim to $maxRows if
+     * the table still exceeds the cap. Scheduler auto-cleanups (pruneExpiredLocal,
+     * trimLocal) intentionally do NOT write history rows — they can remove
+     * thousands of IPs at once and would flood the audit log. Only explicit
+     * add/remove actions via the admin API or request path are recorded.
+     */
+    public static function pruneHistory(SQLite3 $db, int $ttl = 2592000, int $maxRows = 50000): int
+    {
+        $stmt = $db->prepare('DELETE FROM history WHERE acted_at < :cutoff');
+        $stmt->bindValue(':cutoff', time() - $ttl, SQLITE3_INTEGER);
+        $stmt->execute();
+        $pruned = $db->changes();
+
+        // Also cap by row count — delete oldest rows beyond the limit.
+        $stmt = $db->prepare(
+            'DELETE FROM history WHERE id NOT IN (
+                SELECT id FROM history ORDER BY id DESC LIMIT :max
+            )'
+        );
+        $stmt->bindValue(':max', $maxRows, SQLITE3_INTEGER);
+        $stmt->execute();
+        $pruned += $db->changes();
+
+        return $pruned;
     }
 
     public static function getHistory(SQLite3 $db, int $limit = 50, int $offset = 0): array
@@ -288,6 +315,7 @@ class HulkDatabase
     public static function trimLocal(SQLite3 $db, int $limit): void
     {
         // Only trim auto entries; manual blocks are kept regardless of the limit.
+        // Intentionally does not write history rows — see pruneHistory() for rationale.
         $stmt = $db->prepare(
             'DELETE FROM local WHERE is_manual = 0 AND rowid NOT IN (
                 SELECT rowid FROM local WHERE is_manual = 0 ORDER BY rowid DESC LIMIT :limit
@@ -401,6 +429,7 @@ class HulkDatabase
             return 0;
         }
         // Never prune manual entries — only auto entries created by URI filters.
+        // Intentionally does not write history rows — see pruneHistory() for rationale.
         $stmt = $db->prepare('DELETE FROM local WHERE is_manual = 0 AND added_at <= :cutoff');
         $stmt->bindValue(':cutoff', time() - $ttl, SQLITE3_INTEGER);
         $stmt->execute();

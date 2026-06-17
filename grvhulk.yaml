@@ -52,6 +52,8 @@ auto_cache: false
 auto_clean: false
 auto_clean_limit: 10000
 local_ttl: 86400
+history_ttl: 2592000
+history_max_rows: 50000
 
 # Request filtering
 enable_blacklisting: true

@@ -147,7 +147,7 @@
         '<table><thead><tr><th>IP</th><th>Reason</th><th>Added</th><th></th></tr></thead><tbody>' +
         rows.join('') + '</tbody></table>';
 
-      renderPager('grvhulk-local-pager', data.total, LOCAL_LIMIT, localCurrentOffset, loadLocalList);
+      renderPager('grvhulk-local-pager', data.total, LOCAL_LIMIT, localCurrentOffset, 'loadLocalList');
     });
   };
 
@@ -191,20 +191,20 @@
     });
   };
 
-  function renderPager(containerId, total, limit, offset, loadFn) {
+  function renderPager(containerId, total, limit, offset, fnName) {
     var pages   = Math.ceil(total / limit);
     var current = Math.floor(offset / limit);
     var el = document.getElementById(containerId);
     if (pages <= 1) { el.innerHTML = ''; return; }
     var btns = '';
-    btns += '<button class="grvhulk-history-pager-btn" onclick="' + loadFn.name + '(' + Math.max(0, (current - 1) * limit) + ')" ' + (current === 0 ? 'disabled' : '') + '>&lsaquo; Prev</button>';
+    btns += '<button class="grvhulk-history-pager-btn" onclick="' + fnName + '(' + Math.max(0, (current - 1) * limit) + ')" ' + (current === 0 ? 'disabled' : '') + '>&lsaquo; Prev</button>';
     var start = Math.max(0, current - 2);
     var end   = Math.min(pages - 1, current + 2);
     for (var p = start; p <= end; p++) {
       var active = p === current ? ' style="font-weight:bold; background:#eef;"' : '';
-      btns += '<button class="grvhulk-history-pager-btn"' + active + ' onclick="' + loadFn.name + '(' + (p * limit) + ')">' + (p + 1) + '</button>';
+      btns += '<button class="grvhulk-history-pager-btn"' + active + ' onclick="' + fnName + '(' + (p * limit) + ')">' + (p + 1) + '</button>';
     }
-    btns += '<button class="grvhulk-history-pager-btn" onclick="' + loadFn.name + '(' + Math.min((pages - 1) * limit, (current + 1) * limit) + ')" ' + (current >= pages - 1 ? 'disabled' : '') + '>Next &rsaquo;</button>';
+    btns += '<button class="grvhulk-history-pager-btn" onclick="' + fnName + '(' + Math.min((pages - 1) * limit, (current + 1) * limit) + ')" ' + (current >= pages - 1 ? 'disabled' : '') + '>Next &rsaquo;</button>';
     btns += '<span style="margin-left:.5em; color:#888; font-size:.85em;">' + total + ' total</span>';
     el.innerHTML = btns;
   }
@@ -236,7 +236,7 @@
         '<table><thead><tr><th>IP</th><th>Action</th><th>Reason</th><th>Date</th></tr></thead><tbody>' +
         rows.join('') + '</tbody></table>';
 
-      renderPager('grvhulk-history-pager', data.total, HISTORY_LIMIT, offset, loadHistory);
+      renderPager('grvhulk-history-pager', data.total, HISTORY_LIMIT, offset, 'loadHistory');
     });
   };
 
