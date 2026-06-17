@@ -1,7 +1,7 @@
 name: GRVHulk Security
 slug: grvhulk
 type: plugin
-version: 1.0.0
+version: 1.1.0
 description: "Advanced IP security for Grav 2: local blacklist, AbuseIPDB, CrowdSec CTI/LAPI, AI crawler blocking via Known Agents, CIDR whitelist, URI filtering."
 icon: shield
 author:

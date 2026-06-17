@@ -227,11 +227,8 @@ class HulkDatabase
     }
 
     /**
-     * Prune history entries older than $ttl seconds, then trim to $maxRows if
-     * the table still exceeds the cap. Scheduler auto-cleanups (pruneExpiredLocal,
-     * trimLocal) intentionally do NOT write history rows — they can remove
-     * thousands of IPs at once and would flood the audit log. Only explicit
-     * add/remove actions via the admin API or request path are recorded.
+     * Prune the audit log: first drop entries older than $ttl seconds, then
+     * cap the table to its $maxRows newest rows if it still exceeds the limit.
      */
     public static function pruneHistory(SQLite3 $db, int $ttl = 2592000, int $maxRows = 50000): int
     {
