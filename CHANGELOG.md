@@ -1,5 +1,3 @@
-# Changelog
-
 # v1.1.0
 ## 06/17/2026
 
@@ -17,19 +15,9 @@
 1. [](#new)
     * Initial release
     * Local SQLite blacklist (manual entries + auto-population via URI filters)
-    * AbuseIPDB v2 integration:
-        * Bulk blacklist (nightly scheduler, streamed to avoid memory limits)
-        * Live per-request check with configurable confidence threshold and cache
-        * Auto-report of matched IPs to AbuseIPDB
-    * CrowdSec integration (dual-mode):
-        * CTI cloud API (`cti.api.crowdsec.net`) — no self-hosted agent required
-        * LAPI self-hosted agent (`/v1/decisions`)
-        * Configurable score threshold and cache TTL
-        * Quota guard for CTI free-tier rate limits (50 req/day)
-    * Known Agents / Dark Visitors AI crawler blocking:
-        * Blocks AI training crawlers by User-Agent
-        * Daily update via Grav scheduler
-        * Configurable agent type categories
+    * AbuseIPDB v2 integration: Bulk blacklist (nightly scheduler, streamed to avoid memory limits), Live per-request check with configurable confidence threshold and cache, Auto-report of matched IPs to AbuseIPDB
+    * CrowdSec integration (dual-mode): CTI cloud API (`cti.api.crowdsec.net`) — no self-hosted agent required, LAPI self-hosted agent (`/v1/decisions`), Configurable score threshold and cache TTL, Quota guard for CTI free-tier rate limits (50 req/day)
+    * Known Agents / Dark Visitors AI crawler blocking: Blocks AI training crawlers by User-Agent, Daily update via Grav scheduler, Configurable agent type categories
     * CIDR whitelist (IPv4 and IPv6)
     * Trusted-proxy model: forwarding headers (CF-Connecting-IP, X-Real-IP, X-Forwarded-For) are honored only behind a configured `trusted_proxies` CIDR list — otherwise the raw `REMOTE_ADDR` is used, preventing client-IP spoofing
     * URI request filtering with regex patterns (web shells, `.env` probes, credential files, Log4Shell, cloud SSRF, known RCE paths, plus commented context-dependent defaults)
